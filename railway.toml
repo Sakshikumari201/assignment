@@ -1,8 +1,9 @@
 [build]
-buildCommand = "cd backend && npm install && npx prisma generate && npx prisma db push"
+builder = "NIXPACKS"
+buildCommand = "npm run build"
 
 [deploy]
-startCommand = "cd backend && npm start"
+startCommand = "npm start"
 healthcheckPath = "/health"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
