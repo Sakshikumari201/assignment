@@ -1,8 +1,10 @@
 # SplitShare — Shared Expense Management App
 
-> **Live Demo**: 🚀 [https://splitshare-frontend.vercel.app](https://splitshare-frontend.vercel.app) *(deploy in progress — see setup below to run locally)*
+> **Live Demo**: 🚀 [https://frontend-sakshi19.vercel.app](https://frontend-sakshi19.vercel.app)
 > 
-> **Backend API**: [https://splitshare-api.onrender.com](https://splitshare-api.onrender.com)
+> **Backend API**: [https://assignment-production-76ed.up.railway.app](https://assignment-production-76ed.up.railway.app)
+> 
+> **Health Check**: [https://assignment-production-76ed.up.railway.app/health](https://assignment-production-76ed.up.railway.app/health)
 
 A production-ready, database-backed Shared Expense Management Application built with a ledger-based balance calculation engine, multi-currency conversion support, dynamic membership timelines, and a 15-check CSV anomaly detection pipeline.
 
@@ -28,7 +30,7 @@ A production-ready, database-backed Shared Expense Management Application built 
 | Backend | Node.js, Express.js, Prisma 6 ORM |
 | Database | PostgreSQL (production) / SQLite (auto-fallback for dev) |
 | Auth | JWT (JSON Web Tokens) + bcrypt password hashing |
-| Deployment | Render (backend) + Vercel (frontend) + Supabase (database) |
+| Deployment | Railway (backend + PostgreSQL) + Vercel (frontend) |
 
 ---
 
@@ -163,29 +165,25 @@ assignment/
 
 ## 🚀 Production Deployment
 
-### Database — Supabase
-1. Create project at [supabase.com](https://supabase.com)
-2. Go to Settings → Database → copy the **Connection string (URI, Transaction pooler)**
-3. Use as `DATABASE_URL` in production
+### Current Deployment
+- **Frontend**: [https://frontend-sakshi19.vercel.app](https://frontend-sakshi19.vercel.app) — Vercel
+- **Backend**: [https://assignment-production-76ed.up.railway.app](https://assignment-production-76ed.up.railway.app) — Railway
+- **Database**: PostgreSQL on Railway
 
-### Backend — Render
-1. Create a Web Service at [render.com](https://render.com)
-2. Connect this GitHub repository
-3. Set **Root Directory**: `backend`
-4. **Build Command**: `npm install && npx prisma generate && npx prisma db push`
-5. **Start Command**: `npm start`
-6. Environment variables:
-   - `DATABASE_URL` = `<supabase connection string>`
-   - `JWT_SECRET` = `<strong random secret>`
-   - `PORT` = `10000`
+### Deploy Your Own
 
-### Frontend — Vercel
+#### Backend — Railway
+1. Go to [railway.app](https://railway.app) → New Project → Add PostgreSQL
+2. Add GitHub repo as a service, set Root Directory: `backend`
+3. Build Command: `npm install && npx prisma generate`
+4. Start Command: `cd backend && npx prisma db push && npm start`
+5. Environment variables: `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV=production`, `FRONTEND_URL`
+
+#### Frontend — Vercel
 1. Import repo at [vercel.com](https://vercel.com)
 2. **Root Directory**: `frontend`
-3. **Build Command**: `npm run build`
-4. **Output Directory**: `dist`
-5. Environment variable:
-   - `VITE_API_URL` = `<your render backend URL>`
+3. **Build Command**: `npm run build` / **Output Directory**: `dist`
+4. Environment variable: `VITE_API_URL` = your Railway backend URL
 
 ---
 
