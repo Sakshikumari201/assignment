@@ -6,16 +6,68 @@ const prisma = require('../prisma/prisma-client');
  * Parses a CSV file and normalizes headers
  */
 // Canonical header names expected by detectAnomalies
+// Supports multiple column naming conventions (underscored, alternate names, etc.)
 const HEADER_MAP = {
+  // Date
   'date': 'Date',
+
+  // Title / expense name
   'title': 'Title',
-  'description': 'Description',
+  'description': 'Title',   // common alternate — treat description as the expense title
+  'name': 'Title',
+  'expense': 'Title',
+  'item': 'Title',
+  'expensename': 'Title',
+  'expenseitem': 'Title',
+
+  // Description / notes (secondary field)
+  'notes': 'Description',
+  'note': 'Description',
+  'memo': 'Description',
+  'remarks': 'Description',
+  'comment': 'Description',
+  'comments': 'Description',
+
+  // Amount
   'amount': 'Amount',
+  'cost': 'Amount',
+  'total': 'Amount',
+  'price': 'Amount',
+  'value': 'Amount',
+
+  // Currency
   'currency': 'Currency',
+  'curr': 'Currency',
+
+  // Exchange rate
   'exchangerate': 'ExchangeRate',
+  'exchange_rate': 'ExchangeRate',
+  'rate': 'ExchangeRate',
+  'fxrate': 'ExchangeRate',
+  'conversionrate': 'ExchangeRate',
+
+  // PaidBy
   'paidby': 'PaidBy',
+  'paid_by': 'PaidBy',
+  'payer': 'PaidBy',
+  'paidbyuser': 'PaidBy',
+  'whopaid': 'PaidBy',
+  'paidbyemail': 'PaidBy',
+
+  // SplitType
   'splittype': 'SplitType',
+  'split_type': 'SplitType',
+  'splitmethod': 'SplitType',
+  'howsplit': 'SplitType',
+
+  // SplitDetails — split_with takes priority over split_details
+  'splitwith': 'SplitDetails',
+  'split_with': 'SplitDetails',
   'splitdetails': 'SplitDetails',
+  'split_details': 'SplitDetails',
+  'participants': 'SplitDetails',
+  'splitamong': 'SplitDetails',
+  'sharedwith': 'SplitDetails',
 };
 
 function parseCsv(filePath) {
