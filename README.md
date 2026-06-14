@@ -117,12 +117,12 @@ The database seeds 6 users with proper membership timelines:
 
 | User | Email | Password | Active Period |
 |---|---|---|---|
-| Aisha | aisha@example.com | password123 | Jan 2025 – present |
-| Rohan | rohan@example.com | password123 | Jan 2025 – present |
-| Priya | priya@example.com | password123 | Jan 2025 – present |
-| Meera | meera@example.com | password123 | Feb 2025 – Mar 2025 |
-| Dev | dev@example.com | password123 | Jan 2025 – present |
-| Sam | sam@example.com | password123 | Apr 2025 – present |
+| Aisha | aisha@example.com | password123 | Jan 2026 – present |
+| Rohan | rohan@example.com | password123 | Jan 2026 – present |
+| Priya | priya@example.com | password123 | Jan 2026 – present |
+| Meera | meera@example.com | password123 | Feb 2026 – Mar 2026 |
+| Dev | dev@example.com | password123 | Jan 2026 – present |
+| Sam | sam@example.com | password123 | Apr 2026 – present |
 
 ---
 

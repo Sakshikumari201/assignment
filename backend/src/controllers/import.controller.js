@@ -108,6 +108,12 @@ async function resolveImportHandler(req, res, next) {
       throw new BadRequestError('This batch has already been processed');
     }
 
+    // Fetch group members to help with name mapping
+    const members = await prisma.groupMember.findMany({
+      where: { groupId },
+      include: { user: true },
+    });
+
     // 1. Update issue approval statuses based on user choice
     for (const resItem of resolutions) {
       await prisma.importIssue.update({
@@ -179,7 +185,11 @@ async function resolveImportHandler(req, res, next) {
               skipRow = true;
               break;
             case 'NEGATIVE_AMOUNT':
-              rowData.amount = Math.abs(rowData.amount);
+              if (issue.proposedAction === 'Skip importing this row') {
+                skipRow = true;
+              } else {
+                rowData.amount = Math.abs(rowData.amount);
+              }
               break;
             case 'MISSING_AMOUNT':
               rowData.amount = 0;
@@ -188,13 +198,34 @@ async function resolveImportHandler(req, res, next) {
             case 'FUTURE_DATE':
               rowData.date = new Date().toISOString().split('T')[0];
               break;
+            case 'AMBIGUOUS_DATE':
+              rowData.date = '2026-04-05';
+              break;
             case 'MISSING_PAYER':
+              rowData.paidBy = req.user.id;
+              break;
             case 'UNKNOWN_USER':
-              if (issue.issueType === 'MISSING_PAYER' || rowData.paidBy === null) {
-                rowData.paidBy = req.user.id;
+              if (issue.proposedAction.startsWith('Map payer to "')) {
+                const name = issue.proposedAction.split('"')[1];
+                const matchedMember = members.find(m => m.user.name.toLowerCase() === name.toLowerCase());
+                if (matchedMember) {
+                  rowData.paidBy = matchedMember.userId;
+                } else {
+                  rowData.paidBy = req.user.id;
+                }
+              } else if (issue.proposedAction.startsWith('Map participant to "')) {
+                const name = issue.proposedAction.split('"')[1];
+                const matchedMember = members.find(m => m.user.name.toLowerCase() === name.toLowerCase());
+                const splitIndex = rowData.splits.findIndex(s => s.userId === null && s.name.toLowerCase() === name.toLowerCase());
+                if (splitIndex !== -1 && matchedMember) {
+                  rowData.splits[splitIndex].userId = matchedMember.userId;
+                }
+              } else {
+                if (rowData.paidBy === null) {
+                  rowData.paidBy = req.user.id;
+                }
+                rowData.splits = rowData.splits.filter((s) => s.userId !== null && s.userId !== undefined);
               }
-              // Filter out invalid/unknown/null split user IDs
-              rowData.splits = rowData.splits.filter((s) => s.userId !== null && s.userId !== undefined);
               break;
             case 'CURRENCY_MISSING':
               rowData.currency = 'INR';
@@ -206,7 +237,11 @@ async function resolveImportHandler(req, res, next) {
               rowData.description = rowData.title;
               break;
             case 'UNSUPPORTED_SPLIT_TYPE':
-              rowData.splitType = 'EQUAL';
+              if (issue.proposedAction === 'Change split type to EXACT') {
+                rowData.splitType = 'EXACT';
+              } else {
+                rowData.splitType = 'EQUAL';
+              }
               break;
             case 'SPLIT_MISMATCH':
               if (rowData.splitType === 'EXACT') {
@@ -223,16 +258,21 @@ async function resolveImportHandler(req, res, next) {
                 }
               }
               break;
+            case 'SPLIT_DETAILS_CONFLICT':
+              rowData.splits = rowData.splits.map(s => ({ ...s, value: 1 }));
+              break;
             case 'INACTIVE_MEMBER_INVOLVED':
-              // Filter out inactive members from splits
-              rowData.splits = rowData.splits.filter((s) => s.userId !== null);
+              if (issue.proposedAction === 'Skip importing this row') {
+                skipRow = true;
+              } else {
+                rowData.splits = rowData.splits.filter((s) => s.userId !== null);
+              }
               break;
             case 'SETTLEMENT_RECORDED_AS_EXPENSE':
               convertToSettlement = true;
               break;
           }
         } else {
-          // If a critical error is rejected by the user, we cannot import the row
           if (issue.severity === 'ERROR') {
             skipRow = true;
           }

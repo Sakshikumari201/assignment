@@ -39,16 +39,16 @@ async function main() {
   console.log(`Group created: ${group.name} (ID: ${group.id})`);
 
   // Add members with specific timeline rules
-  // Meera: active 2025-02-01 to 2025-03-31
-  // Sam: active 2025-04-15 to null
-  // Others: active 2025-01-01 to null
+  // Meera: active 2026-02-01 to 2026-03-31
+  // Sam: active 2026-04-15 to null
+  // Others: active 2026-01-01 to null
   const memberships = [
-    { name: 'Aisha', joinedAt: '2025-01-01T00:00:00Z', leftAt: null },
-    { name: 'Rohan', joinedAt: '2025-01-01T00:00:00Z', leftAt: null },
-    { name: 'Priya', joinedAt: '2025-01-01T00:00:00Z', leftAt: null },
-    { name: 'Dev', joinedAt: '2025-01-01T00:00:00Z', leftAt: null },
-    { name: 'Meera', joinedAt: '2025-02-01T00:00:00Z', leftAt: '2025-03-31T23:59:59Z' },
-    { name: 'Sam', joinedAt: '2025-04-15T00:00:00Z', leftAt: null },
+    { name: 'Aisha', joinedAt: '2026-01-01T00:00:00Z', leftAt: null },
+    { name: 'Rohan', joinedAt: '2026-01-01T00:00:00Z', leftAt: null },
+    { name: 'Priya', joinedAt: '2026-01-01T00:00:00Z', leftAt: null },
+    { name: 'Dev', joinedAt: '2026-01-01T00:00:00Z', leftAt: null },
+    { name: 'Meera', joinedAt: '2026-02-01T00:00:00Z', leftAt: '2026-03-31T23:59:59Z' },
+    { name: 'Sam', joinedAt: '2026-04-15T00:00:00Z', leftAt: null },
   ];
 
   for (const m of memberships) {
@@ -82,7 +82,7 @@ async function main() {
       exchangeRate: 83.5, // 150 USD -> 12,525 INR
       convertedAmount: 12525.0,
       paidBy: aisha.id,
-      expenseDate: new Date('2025-01-15T12:00:00Z'),
+      expenseDate: new Date('2026-01-15T12:00:00Z'),
       splitType: 'EQUAL',
       splits: {
         create: [

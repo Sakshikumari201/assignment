@@ -175,11 +175,11 @@ When a CSV is uploaded, the import engine parses every row and runs it through 1
 
 | Member | Joined | Left | Active During |
 |---|---|---|---|
-| Aisha | 2025-01-01 | — | Always |
-| Rohan | 2025-01-01 | — | Always |
-| Priya | 2025-01-01 | — | Always |
-| Meera | 2025-02-01 | 2025-03-31 | Feb–Mar 2025 only |
-| Dev | 2025-01-01 | — | Always |
-| Sam | 2025-04-15 | — | Apr 2025 onwards |
+| Aisha | 2026-01-01 | — | Always |
+| Rohan | 2026-01-01 | — | Always |
+| Priya | 2026-01-01 | — | Always |
+| Meera | 2026-02-01 | 2026-03-31 | Feb–Mar 2026 only |
+| Dev | 2026-01-01 | — | Always |
+| Sam | 2026-04-15 | — | Apr 2026 onwards |
 
 Meera's and Sam's windows are the source of `INACTIVE_MEMBER_INVOLVED` anomalies in the test CSV.

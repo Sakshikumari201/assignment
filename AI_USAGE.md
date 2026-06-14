@@ -123,3 +123,71 @@ fs.createReadStream(filePath).pipe(
 This converts `" Exchange Rate "` → `"ExchangeRate"` and `" Paid By "` → `"PaidBy"` automatically, making destructuring reliable.
 
 **Lesson**: Real-world CSV files from spreadsheet exports are messy. Header normalization must be applied before field extraction, never assumed.
+
+---
+
+### Mistake 4 — Delimiter Mismatch in csv-parser (Tab-separated values)
+
+**What the AI generated**:
+The AI generated `csv-parser` calls without setting the `separator` or `delimiter` option, assuming standard comma separation.
+
+**How it was caught**:
+When the updated assignment CSV file (`expenses_export.csv`) was uploaded, it was tab-separated (`\t`). The parser failed to extract columns, treating the entire line as a single field, resulting in `NaN` amounts and undefined fields.
+
+**What was changed**:
+Implemented auto-detection of the delimiter by reading the first line of the file and checking if it contains `\t`:
+```javascript
+const firstLine = fs.readFileSync(filePath, 'utf8').split('\n')[0];
+const separator = firstLine.includes('\t') ? '\t' : ',';
+// Pass separator dynamically to csv() options:
+.pipe(csv({ separator, ... }))
+```
+
+**Lesson**: CSV files can be delimited by commas, semicolons, or tabs. Always verify the delimiter or build auto-detection logic.
+
+---
+
+### Mistake 5 — Overwriting Split Ratios due to Duplicate Key Mapping
+
+**What the AI generated**:
+Mapped both `split_with` and `split_details` to the same destination property `SplitDetails` in `HEADER_MAP`.
+
+**How it was caught**:
+During testing of the 2026 CSV import, the participants list (`split_with`) was completely lost for rows where `split_details` was empty, because the empty `split_details` column overwrote the populated `split_with` column. This prevented `INACTIVE_MEMBER_INVOLVED` checks from validating split participants correctly (e.g. Meera on Row 35).
+
+**What was changed**:
+Separated them into `SplitWith` and `SplitDetails` in the header map, and updated the parsing logic to fall back to `SplitWith` if `SplitDetails` is empty:
+```javascript
+const splitSource = (rawSplitDetails && rawSplitDetails.trim() !== '') ? rawSplitDetails : rawSplitWith;
+```
+
+**Lesson**: Do not map distinct columns containing different types of data to the same property key, even if they seem related.
+
+---
+
+### Mistake 6 — Overly Greedy Fuzzy Name Matcher mapping "Kabir" to "Dev"
+
+**What the AI generated**:
+A name matching helper that checked simple substring inclusion:
+```javascript
+if (cleanRaw.includes(cleanMemberName) || cleanMemberName.includes(cleanRaw)) {
+  return m;
+}
+```
+
+**How it was caught**:
+An entry in the split details for `Dev's friend Kabir` was parsed as an unknown participant. The fuzzy matcher incorrectly mapped `"Dev's friend Kabir"` to `"Dev"`, proposing to assign his share to Dev.
+
+**What was changed**:
+Refined the fuzzy matcher to enforce a name length difference threshold of 3 characters or less:
+```javascript
+if (
+  (cleanRaw.includes(cleanMemberName) || cleanMemberName.includes(cleanRaw)) &&
+  Math.abs(cleanRaw.length - cleanMemberName.length) <= 3
+) {
+  return m;
+}
+```
+This correctly fuzzy matches `"Priya S"` to `"Priya"`, but excludes `"Dev's friend Kabir"` from matching `"Dev"`.
+
+**Lesson**: Fuzzy name mapping must have boundary controls (like Levenshtein distance or string length differences) to prevent irrelevant matches.

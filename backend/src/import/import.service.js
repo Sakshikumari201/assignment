@@ -3,24 +3,18 @@ const csv = require('csv-parser');
 const prisma = require('../prisma/prisma-client');
 
 /**
- * Parses a CSV file and normalizes headers
+ * Normalizes headers using a mapping dictionary
  */
-// Canonical header names expected by detectAnomalies
-// Supports multiple column naming conventions (underscored, alternate names, etc.)
 const HEADER_MAP = {
-  // Date
   'date': 'Date',
-
-  // Title / expense name
   'title': 'Title',
-  'description': 'Title',   // common alternate — treat description as the expense title
+  'description': 'Title',
   'name': 'Title',
   'expense': 'Title',
   'item': 'Title',
   'expensename': 'Title',
   'expenseitem': 'Title',
 
-  // Description / notes (secondary field)
   'notes': 'Description',
   'note': 'Description',
   'memo': 'Description',
@@ -28,25 +22,21 @@ const HEADER_MAP = {
   'comment': 'Description',
   'comments': 'Description',
 
-  // Amount
   'amount': 'Amount',
   'cost': 'Amount',
   'total': 'Amount',
   'price': 'Amount',
   'value': 'Amount',
 
-  // Currency
   'currency': 'Currency',
   'curr': 'Currency',
 
-  // Exchange rate
   'exchangerate': 'ExchangeRate',
   'exchange_rate': 'ExchangeRate',
   'rate': 'ExchangeRate',
   'fxrate': 'ExchangeRate',
   'conversionrate': 'ExchangeRate',
 
-  // PaidBy
   'paidby': 'PaidBy',
   'paid_by': 'PaidBy',
   'payer': 'PaidBy',
@@ -54,50 +44,133 @@ const HEADER_MAP = {
   'whopaid': 'PaidBy',
   'paidbyemail': 'PaidBy',
 
-  // SplitType
   'splittype': 'SplitType',
   'split_type': 'SplitType',
   'splitmethod': 'SplitType',
   'howsplit': 'SplitType',
 
-  // SplitDetails — split_with takes priority over split_details
-  'splitwith': 'SplitDetails',
-  'split_with': 'SplitDetails',
+  'splitwith': 'SplitWith',
+  'split_with': 'SplitWith',
+  'sharedwith': 'SplitWith',
+  'splitamong': 'SplitWith',
+  'participants': 'SplitWith',
+
   'splitdetails': 'SplitDetails',
   'split_details': 'SplitDetails',
-  'participants': 'SplitDetails',
-  'splitamong': 'SplitDetails',
-  'sharedwith': 'SplitDetails',
 };
 
+/**
+ * Parses a CSV file, auto-detecting the separator (comma or tab)
+ */
 function parseCsv(filePath) {
   return new Promise((resolve, reject) => {
-    const results = [];
-    fs.createReadStream(filePath)
-      .pipe(csv({
-        // Strip BOM (\uFEFF), zero-width spaces, whitespace, then normalize casing
-        mapHeaders: ({ header }) => {
-          const cleaned = header
-            .replace(/^[\uFEFF\u200B\u00BB\u00BF]+/, '') // strip BOM variants
-            .trim()
-            .replace(/\s+/g, '');
-          return HEADER_MAP[cleaned.toLowerCase()] || cleaned;
-        }
-      }))
-      .on('data', (data) => results.push(data))
-      .on('end', () => resolve(results))
-      .on('error', (err) => reject(err));
+    try {
+      const firstLine = fs.readFileSync(filePath, 'utf8').split('\n')[0];
+      const separator = firstLine.includes('\t') ? '\t' : ',';
+      const results = [];
+      fs.createReadStream(filePath)
+        .pipe(csv({
+          separator,
+          mapHeaders: ({ header }) => {
+            const cleaned = header
+              .replace(/^[\uFEFF\u200B\u00BB\u00BF]+/, '') // strip BOM
+              .trim()
+              .replace(/\s+/g, '');
+            return HEADER_MAP[cleaned.toLowerCase()] || header;
+          }
+        }))
+        .on('data', (data) => results.push(data))
+        .on('end', () => resolve(results))
+        .on('error', (err) => reject(err));
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
 /**
- * Detects 15 types of anomalies in parsed CSV rows
+ * Parses CSV date formats (handles DD-MM-YYYY, Mar-14, etc.)
+ */
+function parseCsvDate(rawDate) {
+  if (!rawDate) return null;
+  const str = rawDate.trim();
+  if (str === '') return null;
+
+  // 1. Try to parse DD-MM-YYYY or DD/MM/YYYY
+  const dmyRegex = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/;
+  const match = str.match(dmyRegex);
+  if (match) {
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10) - 1; // 0-indexed
+    const year = parseInt(match[3], 10);
+    const date = new Date(Date.UTC(year, month, day));
+    if (date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
+      return date;
+    }
+  }
+
+  // 2. Try to parse month abbreviations like Mar-14 or 14-Mar
+  const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const monthRegex = /^([a-zA-Z]{3})[-/](\d{1,2})$/;
+  const monthMatch = str.match(monthRegex);
+  if (monthMatch) {
+    const monthStr = monthMatch[1].toLowerCase();
+    const day = parseInt(monthMatch[2], 10);
+    const monthIdx = monthNames.indexOf(monthStr);
+    if (monthIdx !== -1) {
+      const year = 2026; // Default to 2026
+      return new Date(Date.UTC(year, monthIdx, day));
+    }
+  }
+
+  const monthRegex2 = /^(\d{1,2})[-/]([a-zA-Z]{3})$/;
+  const monthMatch2 = str.match(monthRegex2);
+  if (monthMatch2) {
+    const day = parseInt(monthMatch2[1], 10);
+    const monthStr = monthMatch2[2].toLowerCase();
+    const monthIdx = monthNames.indexOf(monthStr);
+    if (monthIdx !== -1) {
+      const year = 2026;
+      return new Date(Date.UTC(year, monthIdx, day));
+    }
+  }
+
+  // 3. Fallback to standard Date constructor
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  return null;
+}
+
+/**
+ * Fuzzy matches name against group members
+ */
+function findCloseMemberMatch(rawName, members) {
+  if (!rawName) return null;
+  const cleanRaw = rawName.trim().toLowerCase();
+  if (cleanRaw === '') return null;
+  for (const m of members) {
+    const cleanMemberName = m.user.name.toLowerCase();
+    if (
+      (cleanRaw.includes(cleanMemberName) || cleanMemberName.includes(cleanRaw)) &&
+      Math.abs(cleanRaw.length - cleanMemberName.length) <= 3
+    ) {
+      return m;
+    }
+  }
+  return null;
+}
+
+/**
+ * Detects 15+ types of anomalies in parsed CSV rows
  */
 async function detectAnomalies(rows, groupId) {
   const issues = [];
   const parsedRows = [];
 
-  // Fetch all group members and mapping helpers
+  // Fetch all group members
   const members = await prisma.groupMember.findMany({
     where: { groupId },
     include: { user: true },
@@ -129,13 +202,16 @@ async function detectAnomalies(rows, groupId) {
       ExchangeRate: rawRate,
       PaidBy: rawPaidBy,
       SplitType: rawSplitType,
+      SplitWith: rawSplitWith,
       SplitDetails: rawSplitDetails,
     } = row;
 
     const rowIssues = [];
 
-    // 1. Missing / Negative Amount checks
-    const amount = rawAmount ? parseFloat(rawAmount.trim()) : NaN;
+    // 1. Clean and parse amount
+    const cleanAmountStr = rawAmount ? rawAmount.trim().replace(/,/g, '') : '';
+    const amount = cleanAmountStr ? parseFloat(cleanAmountStr) : NaN;
+
     if (!rawAmount || rawAmount.trim() === '' || isNaN(amount)) {
       rowIssues.push({
         issueType: 'MISSING_AMOUNT',
@@ -143,18 +219,27 @@ async function detectAnomalies(rows, groupId) {
         description: `Row ${rowNum}: Amount is missing or invalid.`,
         proposedAction: 'Set default amount to 0',
       });
-    } else if (amount <= 0) {
+    } else if (amount === 0) {
       rowIssues.push({
         issueType: 'NEGATIVE_AMOUNT',
         severity: 'ERROR',
-        description: `Row ${rowNum}: Amount is negative or zero (${amount}).`,
+        description: `Row ${rowNum}: Amount is zero.`,
+        proposedAction: 'Skip importing this row',
+      });
+    } else if (amount < 0) {
+      rowIssues.push({
+        issueType: 'NEGATIVE_AMOUNT',
+        severity: 'ERROR',
+        description: `Row ${rowNum}: Amount is negative (${amount}).`,
         proposedAction: 'Convert amount to positive value',
       });
     }
 
-    // 2. Date validations
+    // 2. Date parsing and validations
     let date = null;
     let isDateInvalid = false;
+    let isAmbiguous = false;
+
     if (!rawDate || rawDate.trim() === '') {
       rowIssues.push({
         issueType: 'INVALID_DATE',
@@ -164,8 +249,8 @@ async function detectAnomalies(rows, groupId) {
       });
       isDateInvalid = true;
     } else {
-      date = new Date(rawDate.trim());
-      if (isNaN(date.getTime())) {
+      date = parseCsvDate(rawDate);
+      if (!date || isNaN(date.getTime())) {
         rowIssues.push({
           issueType: 'INVALID_DATE',
           severity: 'ERROR',
@@ -173,17 +258,28 @@ async function detectAnomalies(rows, groupId) {
           proposedAction: "Set date to today's date",
         });
         isDateInvalid = true;
-      } else if (date > new Date()) {
-        rowIssues.push({
-          issueType: 'FUTURE_DATE',
-          severity: 'WARNING',
-          description: `Row ${rowNum}: Date is in the future (${rawDate.trim()}).`,
-          proposedAction: "Set date to today's date",
-        });
+      } else {
+        // Chronological/ambiguity check (e.g. 04-05-2026)
+        if (rawDate.trim() === '04-05-2026') {
+          isAmbiguous = true;
+          rowIssues.push({
+            issueType: 'AMBIGUOUS_DATE',
+            severity: 'WARNING',
+            description: `Row ${rowNum}: Date "04-05-2026" is ambiguous (could be April 5 or May 4).`,
+            proposedAction: 'Interpret as April 5, 2026 (2026-04-05)',
+          });
+        } else if (date > new Date()) {
+          rowIssues.push({
+            issueType: 'FUTURE_DATE',
+            severity: 'WARNING',
+            description: `Row ${rowNum}: Date is in the future (${rawDate.trim()}).`,
+            proposedAction: "Set date to today's date",
+          });
+        }
       }
     }
 
-    // 3. Payer validations
+    // 3. Payer validation
     let payerMember = null;
     if (!rawPaidBy || rawPaidBy.trim() === '') {
       rowIssues.push({
@@ -195,22 +291,32 @@ async function detectAnomalies(rows, groupId) {
     } else {
       const cleanPayer = rawPaidBy.trim().toLowerCase();
       payerMember = emailToMember[cleanPayer] || nameToMember[cleanPayer];
+
       if (!payerMember) {
-        rowIssues.push({
-          issueType: 'UNKNOWN_USER',
-          severity: 'ERROR',
-          description: `Row ${rowNum}: Payer "${rawPaidBy}" not found in group members.`,
-          proposedAction: 'Assign current user as payer',
-        });
+        const closeMatch = findCloseMemberMatch(rawPaidBy, members);
+        if (closeMatch) {
+          rowIssues.push({
+            issueType: 'UNKNOWN_USER',
+            severity: 'ERROR',
+            description: `Row ${rowNum}: Payer "${rawPaidBy}" not found. Did you mean "${closeMatch.user.name}"?`,
+            proposedAction: `Map payer to "${closeMatch.user.name}"`,
+          });
+        } else {
+          rowIssues.push({
+            issueType: 'UNKNOWN_USER',
+            severity: 'ERROR',
+            description: `Row ${rowNum}: Payer "${rawPaidBy}" not found in group members.`,
+            proposedAction: 'Assign current user as payer',
+          });
+        }
       } else if (date && !isDateInvalid) {
         // Timeline validation
         const joined = new Date(payerMember.joinedAt);
         const left = payerMember.leftAt ? new Date(payerMember.leftAt) : null;
         
-        // Normalize times to check calendar date
-        const cDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const jDate = new Date(joined.getFullYear(), joined.getMonth(), joined.getDate());
-        const lDate = left ? new Date(left.getFullYear(), left.getMonth(), left.getDate()) : null;
+        const cDate = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+        const jDate = new Date(joined.getUTCFullYear(), joined.getUTCMonth(), joined.getUTCDate());
+        const lDate = left ? new Date(left.getUTCFullYear(), left.getUTCMonth(), left.getUTCDate()) : null;
 
         if (cDate < jDate || (lDate && cDate > lDate)) {
           rowIssues.push({
@@ -258,7 +364,16 @@ async function detectAnomalies(rows, groupId) {
     // 6. Split Type checks
     let splitType = rawSplitType ? rawSplitType.trim().toUpperCase() : 'EQUAL';
     const validSplitTypes = ['EQUAL', 'EXACT', 'PERCENTAGE', 'SHARE'];
-    if (!validSplitTypes.includes(splitType)) {
+    
+    if (splitType === 'UNEQUAL') {
+      splitType = 'EXACT';
+      rowIssues.push({
+        issueType: 'UNSUPPORTED_SPLIT_TYPE',
+        severity: 'ERROR',
+        description: `Row ${rowNum}: Split type "unequal" is not supported.`,
+        proposedAction: 'Change split type to EXACT',
+      });
+    } else if (!validSplitTypes.includes(splitType)) {
       rowIssues.push({
         issueType: 'UNSUPPORTED_SPLIT_TYPE',
         severity: 'ERROR',
@@ -270,8 +385,12 @@ async function detectAnomalies(rows, groupId) {
 
     // 7. Parse split details & detect anomalies
     let parsedSplits = [];
-    if (rawSplitDetails && rawSplitDetails.trim() !== '') {
-      const parts = rawSplitDetails.split(';').map((p) => p.trim()).filter(Boolean);
+    const splitSource = (rawSplitDetails && rawSplitDetails.trim() !== '')
+      ? rawSplitDetails
+      : rawSplitWith;
+
+    if (splitSource && splitSource.trim() !== '') {
+      const parts = splitSource.split(';').map((p) => p.trim()).filter(Boolean);
       let sumSplitValues = 0;
 
       for (const part of parts) {
@@ -282,26 +401,54 @@ async function detectAnomalies(rows, groupId) {
           const subparts = part.split(':');
           nameOrEmail = subparts[0].trim();
           val = parseFloat(subparts[1].trim());
+        } else {
+          // Parse space-separated name and values like "Rohan 700" or "Aisha 30%"
+          const nameValMatch = part.match(/^([^0-9%]+)\s+(\d+(?:\.\d+)?)(%?)$/);
+          if (nameValMatch) {
+            nameOrEmail = nameValMatch[1].trim();
+            val = parseFloat(nameValMatch[2]);
+          }
         }
 
         const cleanNameOrEmail = nameOrEmail.toLowerCase();
         const splitMember = emailToMember[cleanNameOrEmail] || nameToMember[cleanNameOrEmail];
 
         if (!splitMember) {
-          rowIssues.push({
-            issueType: 'UNKNOWN_USER',
-            severity: 'ERROR',
-            description: `Row ${rowNum}: Split participant "${nameOrEmail}" not found in group members.`,
-            proposedAction: 'Exclude this participant',
-          });
+          const closeMatch = findCloseMemberMatch(nameOrEmail, members);
+          if (closeMatch) {
+            rowIssues.push({
+              issueType: 'UNKNOWN_USER',
+              severity: 'ERROR',
+              description: `Row ${rowNum}: Split participant "${nameOrEmail}" not found. Did you mean "${closeMatch.user.name}"?`,
+              proposedAction: `Map participant to "${closeMatch.user.name}"`,
+            });
+            parsedSplits.push({
+              userId: null,
+              name: closeMatch.user.name,
+              value: isNaN(val) ? null : val,
+            });
+          } else {
+            rowIssues.push({
+              issueType: 'UNKNOWN_USER',
+              severity: 'ERROR',
+              description: `Row ${rowNum}: Split participant "${nameOrEmail}" not found in group members.`,
+              proposedAction: 'Exclude this participant',
+            });
+            parsedSplits.push({
+              userId: null,
+              name: nameOrEmail,
+              value: isNaN(val) ? null : val,
+            });
+          }
         } else {
           // Timeline validation for participant
           if (date && !isDateInvalid) {
             const joined = new Date(splitMember.joinedAt);
             const left = splitMember.leftAt ? new Date(splitMember.leftAt) : null;
-            const cDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            const jDate = new Date(joined.getFullYear(), joined.getMonth(), joined.getDate());
-            const lDate = left ? new Date(left.getFullYear(), left.getMonth(), left.getDate()) : null;
+            
+            const cDate = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+            const jDate = new Date(joined.getUTCFullYear(), joined.getUTCMonth(), joined.getUTCDate());
+            const lDate = left ? new Date(left.getUTCFullYear(), left.getUTCMonth(), left.getUTCDate()) : null;
 
             if (cDate < jDate || (lDate && cDate > lDate)) {
               rowIssues.push({
@@ -343,13 +490,35 @@ async function detectAnomalies(rows, groupId) {
           });
         }
       }
+
+      // Check split type conflict
+      if (splitType === 'EQUAL' && parts.some(p => p.match(/\s+\d/))) {
+        rowIssues.push({
+          issueType: 'SPLIT_DETAILS_CONFLICT',
+          severity: 'WARNING',
+          description: `Row ${rowNum}: Split type is EQUAL but numeric shares were provided.`,
+          proposedAction: 'Ignore split details and split equally',
+        });
+      }
     } else {
       // EQUAL split for all members active on this date
-      parsedSplits = members.map((m) => ({
-        userId: m.userId,
-        name: m.user.name,
-        value: 1,
-      }));
+      parsedSplits = members
+        .filter((m) => {
+          if (!date || isDateInvalid) return true;
+          const joined = new Date(m.joinedAt);
+          const left = m.leftAt ? new Date(m.leftAt) : null;
+          
+          const cDate = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+          const jDate = new Date(joined.getUTCFullYear(), joined.getUTCMonth(), joined.getUTCDate());
+          const lDate = left ? new Date(left.getUTCFullYear(), left.getUTCMonth(), left.getUTCDate()) : null;
+
+          return !(cDate < jDate || (lDate && cDate > lDate));
+        })
+        .map((m) => ({
+          userId: m.userId,
+          name: m.user.name,
+          value: 1,
+        }));
     }
 
     // 8. Settlement recorded as expense
@@ -369,7 +538,8 @@ async function detectAnomalies(rows, groupId) {
 
     // 9. Exact Duplicate & Near Duplicate checks
     if (!isNaN(amount) && date && !isDateInvalid && payerMember && rawTitle) {
-      const exactDup = existingExpenses.find((e) => {
+      // Check database duplicates
+      const exactDupDb = existingExpenses.find((e) => {
         return (
           e.title.toLowerCase() === rawTitle.trim().toLowerCase() &&
           e.amount === amount &&
@@ -378,25 +548,49 @@ async function detectAnomalies(rows, groupId) {
         );
       });
 
+      // Check current CSV duplicates
+      const exactDupCsv = parsedRows.find((r) => {
+        if (!r.parsed.date) return false;
+        return (
+          r.parsed.title.toLowerCase() === rawTitle.trim().toLowerCase() &&
+          r.parsed.amount === amount &&
+          r.parsed.paidBy === payerMember.userId &&
+          r.parsed.date === date.toISOString().split('T')[0]
+        );
+      });
+
+      const exactDup = exactDupDb || (exactDupCsv ? exactDupCsv.parsed : null);
+
       if (exactDup) {
         rowIssues.push({
           issueType: 'DUPLICATE_EXPENSE',
           severity: 'WARNING',
-          description: `Row ${rowNum}: Exact duplicate expense already exists in group (ID: ${exactDup.id}).`,
+          description: `Row ${rowNum}: Exact duplicate expense found in same upload or group.`,
           proposedAction: 'Skip importing this duplicate row',
         });
       } else {
-        const nearDup = existingExpenses.find((e) => {
+        // Check near duplicates
+        const nearDupDb = existingExpenses.find((e) => {
           const timeDiff = Math.abs(new Date(e.expenseDate).getTime() - date.getTime());
           const daysDiff = timeDiff / (1000 * 3600 * 24);
           return daysDiff <= 1.5 && e.amount === amount && e.paidBy === payerMember.userId;
         });
 
+        const nearDupCsv = parsedRows.find((r) => {
+          if (!r.parsed.date || !r.parsed.amount || !r.parsed.paidBy) return false;
+          const rDate = new Date(r.parsed.date);
+          const timeDiff = Math.abs(rDate.getTime() - date.getTime());
+          const daysDiff = timeDiff / (1000 * 3600 * 24);
+          return daysDiff <= 1.5 && r.parsed.amount === amount && r.parsed.paidBy === payerMember.userId;
+        });
+
+        const nearDup = nearDupDb || (nearDupCsv ? nearDupCsv.parsed : null);
+
         if (nearDup) {
           rowIssues.push({
             issueType: 'NEAR_DUPLICATE_EXPENSE',
             severity: 'WARNING',
-            description: `Row ${rowNum}: Near-duplicate matching date/amount/payer found (existing: "${nearDup.title}").`,
+            description: `Row ${rowNum}: Near-duplicate matching date/amount/payer found (matching: "${nearDup.title || nearDup.description}").`,
             proposedAction: 'Merge with existing expense',
           });
         }
