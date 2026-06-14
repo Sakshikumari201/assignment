@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Root package - delegates to backend",
   "scripts": {
-    "start": "node backend/src/index.js",
-    "build": "cd backend && npm install && npx prisma generate && npx prisma db push",
+    "start": "cd backend && npx prisma db push && node src/index.js",
+    "build": "cd backend && npm install && npx prisma generate",
     "install-backend": "cd backend && npm install"
   },
   "engines": {
