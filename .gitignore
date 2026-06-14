@@ -1,0 +1,67 @@
+# ========================
+# Dependencies
+# ========================
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+.pnp
+.pnp.js
+
+# ========================
+# Environment Variables
+# NEVER commit secrets
+# ========================
+.env
+.env.local
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ========================
+# Build Outputs
+# ========================
+dist/
+build/
+.next/
+frontend/dist/
+backend/dist/
+
+# ========================
+# Prisma
+# (client is regenerated at build time)
+# ========================
+backend/prisma/generated/
+
+# ========================
+# File Uploads
+# (user-uploaded files, not for version control)
+# ========================
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ========================
+# OS / Editor artifacts
+# ========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========================
+# Logs
+# ========================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ========================
+# Test / Coverage
+# ========================
+coverage/
+*.lcov
