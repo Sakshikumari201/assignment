@@ -5,12 +5,32 @@ const prisma = require('../prisma/prisma-client');
 /**
  * Parses a CSV file and normalizes headers
  */
+// Canonical header names expected by detectAnomalies
+const HEADER_MAP = {
+  'date': 'Date',
+  'title': 'Title',
+  'description': 'Description',
+  'amount': 'Amount',
+  'currency': 'Currency',
+  'exchangerate': 'ExchangeRate',
+  'paidby': 'PaidBy',
+  'splittype': 'SplitType',
+  'splitdetails': 'SplitDetails',
+};
+
 function parseCsv(filePath) {
   return new Promise((resolve, reject) => {
     const results = [];
     fs.createReadStream(filePath)
       .pipe(csv({
-        mapHeaders: ({ header }) => header.trim().replace(/\s+/g, '')
+        // Strip BOM (\uFEFF), zero-width spaces, whitespace, then normalize casing
+        mapHeaders: ({ header }) => {
+          const cleaned = header
+            .replace(/^[\uFEFF\u200B\u00BB\u00BF]+/, '') // strip BOM variants
+            .trim()
+            .replace(/\s+/g, '');
+          return HEADER_MAP[cleaned.toLowerCase()] || cleaned;
+        }
       }))
       .on('data', (data) => results.push(data))
       .on('end', () => resolve(results))
